@@ -21,15 +21,42 @@ An HTTP [Model Context Protocol (MCP)](https://modelcontextprotocol.io) gateway 
 
 ## Running
 
-```bash
-# Docker Compose (recommended)
-docker compose up -d
+### Docker Compose (recommended)
 
-# Local dev
-npm run dev
+Create a `docker-compose.yml`:
+
+```yaml
+version: "3.9"
+
+services:
+  mempalace-mcp:
+    image: ghcr.io/thehaseebahmed/mempalace-mcp:latest
+    container_name: mempalace-mcp
+    user: "1000:1000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./palace-data:/data
+    environment:
+      - BASE_DIR=/data
+      - TRANSFORMERS_CACHE=/data/.cache/transformers
+      - HF_HOME=/data/.cache/huggingface
+    restart: unless-stopped
 ```
 
-Data is persisted to `~/volumes/mempalace/data` (mapped to `/data` in the container).
+Then run:
+
+```bash
+docker compose up -d
+```
+
+Data is persisted to a `palace-data/` folder next to your `docker-compose.yml` (mapped to `/data` in the container).
+
+### Local dev
+
+```bash
+npm run dev
+```
 
 ## Configuration
 
