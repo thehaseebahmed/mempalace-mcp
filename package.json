@@ -1,0 +1,19 @@
+{
+  "name": "mempalace-mcp-server",
+  "version": "1.0.0",
+  "description": "HTTP MCP server wrapping the mempalace CLI",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "express": "^5.1.0",
+    "zod": "^3.24.0"
+  }
+}

@@ -1,0 +1,5 @@
+node_modules/
+palace-data/
+.mcp.json
+.git/
+.claude/
