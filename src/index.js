@@ -6,7 +6,7 @@ import { isInitializeRequest, ListToolsRequestSchema, CallToolRequestSchema } fr
 import express from "express";
 import { randomUUID } from "node:crypto";
 import { execFileSync, execFile } from "node:child_process";
-import { mkdirSync, writeFileSync, renameSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -152,34 +152,30 @@ app.get("/users/:userId/wake-up", async (req, res) => {
   }
 });
 
-// REST convenience endpoint: save a transcript into the user's convos folder, mine it, then move it to convos-mined.
 app.post("/users/:userId/mine", async (req, res) => {
   const { userId } = req.params;
-  const { filename, transcript } = req.body ?? {};
+  const { id, jsonl } = req.body ?? {};
 
-  if (!filename || !transcript?.trim()) {
-    return res.status(400).json({ error: "Request body must include filename and transcript" });
+  if (!id || !Array.isArray(jsonl) || jsonl.length === 0) {
+    return res.status(400).json({ error: "Request body must include id (string) and jsonl (non-empty array)" });
   }
 
-  const convosDir  = join(BASE_DIR, userId, "convos");
-  const minedDir   = join(BASE_DIR, userId, "convos-mined");
-  const srcFile    = join(convosDir, filename);
-  const dstFile    = join(minedDir, filename);
+  const targetDir = join(BASE_DIR, userId, id);
 
   try {
-    mkdirSync(convosDir, { recursive: true });
-    mkdirSync(minedDir,  { recursive: true });
-    writeFileSync(srcFile, transcript, "utf-8");
+    mkdirSync(targetDir, { recursive: true });
+
+    for (const obj of jsonl) {
+      writeFileSync(join(targetDir, `${randomUUID()}.jsonl`), JSON.stringify(obj) + "\n", "utf-8");
+    }
 
     await getClient(userId);
 
     const { stdout, stderr } = await execFileAsync(
       PYTHON_BIN,
-      ["-m", "mempalace", "--palace", palaceDir(userId), "mine", convosDir, "--mode", "convos", "--extract", "general"],
+      ["-m", "mempalace", "--palace", palaceDir(userId), "mine", targetDir, "--mode", "convos", "--extract", "general"],
       { env: { ...process.env, PYTHONIOENCODING: "utf-8" }, maxBuffer: 10 * 1024 * 1024 },
     );
-
-    renameSync(srcFile, dstFile);
 
     const output = [stdout, stderr].filter(Boolean).join("\n").trim();
     res.json({ data: output || "Transcript mined successfully" });
