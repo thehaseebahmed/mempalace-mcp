@@ -4,7 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { isInitializeRequest, ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { execFileSync, execFile } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,6 +17,7 @@ const BASE_DIR      = process.env.BASE_DIR ?? "/data";
 const PYTHON_BIN    = process.env.PYTHON_BIN ?? "/opt/mempalace-venv/bin/python";
 
 const palaceDir = (userId) => join(BASE_DIR, userId, ".mempalace");
+const contentHash = (obj) => createHash("sha256").update(JSON.stringify(obj)).digest("hex");
 
 // Per-user subprocess clients: userId -> { client, toolParams: Map<toolName, Set<paramName>> }
 const subprocessClients = new Map();
@@ -166,7 +167,7 @@ app.post("/users/:userId/mine", async (req, res) => {
     mkdirSync(targetDir, { recursive: true });
 
     for (const obj of jsonl) {
-      writeFileSync(join(targetDir, `${randomUUID()}.jsonl`), JSON.stringify(obj) + "\n", "utf-8");
+      writeFileSync(join(targetDir, `${contentHash(obj)}.jsonl`), JSON.stringify(obj) + "\n", "utf-8");
     }
 
     await getClient(userId);
