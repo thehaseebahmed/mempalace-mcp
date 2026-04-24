@@ -5,9 +5,12 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { isInitializeRequest, ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 import { randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { execFileSync, execFile } from "node:child_process";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 const PORT          = parseInt(process.env.MCP_PORT ?? "3000", 10);
 const BASE_DIR      = process.env.BASE_DIR ?? "/data";
@@ -148,6 +151,53 @@ app.get("/users/:userId/wake-up", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// REST convenience endpoint: accept a transcript, mine it into the palace, then clean up the temp file.
+// Accepts application/json { transcript, filename? } or text/plain body (filename via X-Filename header).
+app.post(
+  "/users/:userId/mine-transcript",
+  express.text({ type: "text/plain", limit: "50mb" }),
+  async (req, res) => {
+    const { userId } = req.params;
+
+    let transcript, filename;
+    if (typeof req.body === "object" && req.body !== null) {
+      transcript = req.body.transcript;
+      filename = req.body.filename;
+    } else if (typeof req.body === "string") {
+      transcript = req.body;
+      filename = req.headers["x-filename"];
+    }
+
+    if (!transcript?.trim()) {
+      return res.status(400).json({ error: "Transcript content is required" });
+    }
+
+    filename = filename ?? `transcript_${Date.now()}.json`;
+    const tmpDir = join(BASE_DIR, userId, `tmp_${Date.now()}`);
+    const tmpFile = join(tmpDir, filename);
+
+    try {
+      mkdirSync(tmpDir, { recursive: true });
+      writeFileSync(tmpFile, transcript, "utf-8");
+
+      await getClient(userId);
+
+      const { stdout, stderr } = await execFileAsync(
+        PYTHON_BIN,
+        ["-m", "mempalace", "mine", tmpDir, "--mode", "convos", "--palace", palaceDir(userId)],
+        { env: { ...process.env, PYTHONIOENCODING: "utf-8" }, maxBuffer: 10 * 1024 * 1024 },
+      );
+
+      const output = [stdout, stderr].filter(Boolean).join("\n").trim();
+      res.json({ data: output || "Transcript mined successfully" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    } finally {
+      try { rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  },
+);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", base: BASE_DIR, activePalaces: subprocessClients.size, sessions: sessions.size });
