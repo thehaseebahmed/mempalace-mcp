@@ -6,7 +6,7 @@ import { isInitializeRequest, ListToolsRequestSchema, CallToolRequestSchema } fr
 import express from "express";
 import { randomUUID, createHash } from "node:crypto";
 import { execFileSync, execFile } from "node:child_process";
-import { mkdirSync, writeFileSync, renameSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -162,7 +162,6 @@ app.post("/users/:userId/mine", async (req, res) => {
   }
 
   const targetDir = join(BASE_DIR, userId, id);
-  const minedDir  = join(BASE_DIR, userId, `${id}-mined`);
 
   try {
     mkdirSync(targetDir, { recursive: true });
@@ -179,7 +178,7 @@ app.post("/users/:userId/mine", async (req, res) => {
       { env: { ...process.env, PYTHONIOENCODING: "utf-8" }, maxBuffer: 10 * 1024 * 1024 },
     );
 
-    renameSync(targetDir, minedDir);
+    rmSync(targetDir, { recursive: true, force: true });
 
     const output = [stdout, stderr].filter(Boolean).join("\n").trim();
     res.json({ data: output || "Transcript mined successfully" });
