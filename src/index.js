@@ -6,7 +6,7 @@ import { isInitializeRequest, ListToolsRequestSchema, CallToolRequestSchema } fr
 import express from "express";
 import { randomUUID } from "node:crypto";
 import { execFileSync, execFile } from "node:child_process";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -152,52 +152,41 @@ app.get("/users/:userId/wake-up", async (req, res) => {
   }
 });
 
-// REST convenience endpoint: accept a transcript, mine it into the palace, then clean up the temp file.
-// Accepts application/json { transcript, filename? } or text/plain body (filename via X-Filename header).
-app.post(
-  "/users/:userId/mine",
-  express.text({ type: "text/plain", limit: "50mb" }),
-  async (req, res) => {
-    const { userId } = req.params;
+// REST convenience endpoint: save a transcript into the user's convos folder, mine it, then move it to convos-mined.
+app.post("/users/:userId/mine", async (req, res) => {
+  const { userId } = req.params;
+  const { filename, transcript } = req.body ?? {};
 
-    let transcript, filename;
-    if (typeof req.body === "object" && req.body !== null) {
-      transcript = req.body.transcript;
-      filename = req.body.filename;
-    } else if (typeof req.body === "string") {
-      transcript = req.body;
-      filename = req.headers["x-filename"];
-    }
+  if (!filename || !transcript?.trim()) {
+    return res.status(400).json({ error: "Request body must include filename and transcript" });
+  }
 
-    if (!transcript?.trim()) {
-      return res.status(400).json({ error: "Transcript content is required" });
-    }
+  const convosDir  = join(BASE_DIR, userId, "convos");
+  const minedDir   = join(BASE_DIR, userId, "convos-mined");
+  const srcFile    = join(convosDir, filename);
+  const dstFile    = join(minedDir, filename);
 
-    filename = filename ?? `transcript_${Date.now()}.json`;
-    const tmpDir = join(BASE_DIR, userId, `tmp_${Date.now()}`);
-    const tmpFile = join(tmpDir, filename);
+  try {
+    mkdirSync(convosDir, { recursive: true });
+    mkdirSync(minedDir,  { recursive: true });
+    writeFileSync(srcFile, transcript, "utf-8");
 
-    try {
-      mkdirSync(tmpDir, { recursive: true });
-      writeFileSync(tmpFile, transcript, "utf-8");
+    await getClient(userId);
 
-      await getClient(userId);
+    const { stdout, stderr } = await execFileAsync(
+      PYTHON_BIN,
+      ["-m", "mempalace", "--palace", palaceDir(userId), "mine", convosDir, "--mode", "convos", "--extract", "general"],
+      { env: { ...process.env, PYTHONIOENCODING: "utf-8" }, maxBuffer: 10 * 1024 * 1024 },
+    );
 
-      const { stdout, stderr } = await execFileAsync(
-        PYTHON_BIN,
-        ["-m", "mempalace", "--palace", palaceDir(userId), "mine", tmpDir, "--mode", "convos", "--extract", "general"],
-        { env: { ...process.env, PYTHONIOENCODING: "utf-8" }, maxBuffer: 10 * 1024 * 1024 },
-      );
+    renameSync(srcFile, dstFile);
 
-      const output = [stdout, stderr].filter(Boolean).join("\n").trim();
-      res.json({ data: output || "Transcript mined successfully" });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    } finally {
-      try { rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-    }
-  },
-);
+    const output = [stdout, stderr].filter(Boolean).join("\n").trim();
+    res.json({ data: output || "Transcript mined successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", base: BASE_DIR, activePalaces: subprocessClients.size, sessions: sessions.size });
