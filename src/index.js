@@ -5,7 +5,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { isInitializeRequest, ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 import { randomUUID, createHash } from "node:crypto";
-import { execFileSync, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -26,9 +26,6 @@ async function getClient(userId) {
   if (subprocessClients.has(userId)) return subprocessClients.get(userId);
 
   mkdirSync(palaceDir(userId), { recursive: true });
-  execFileSync(PYTHON_BIN, ["-m", "mempalace", "init", "--yes", palaceDir(userId)], {
-    env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-  });
 
   const transport = new StdioClientTransport({
     command: PYTHON_BIN,
