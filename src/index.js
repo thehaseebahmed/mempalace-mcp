@@ -26,7 +26,7 @@ async function getClient(userId) {
   if (subprocessClients.has(userId)) return subprocessClients.get(userId);
 
   mkdirSync(palaceDir(userId), { recursive: true });
-  execFileSync(PYTHON_BIN, ["-m", "mempalace", "--palace", palaceDir(userId), "init", "--yes"], {
+  execFileSync(PYTHON_BIN, ["-m", "mempalace", "--palace", palaceDir(userId), "init", "--yes", palaceDir(userId)], {
     env: { ...process.env, PYTHONIOENCODING: "utf-8" },
   });
 
