@@ -17,7 +17,7 @@ An HTTP [Model Context Protocol (MCP)](https://modelcontextprotocol.io) gateway 
 | `GET` | `/mcp/:userId` | MCP SSE stream for active session |
 | `DELETE` | `/mcp/:userId` | Close an MCP session |
 | `GET` | `/users/:userId/wake-up` | Pre-warm a user's palace and return its status |
-| `POST` | `/users/:userId/mine-transcript` | Mine a chat transcript into the palace, then clean up the temp file |
+| `POST` | `/users/:userId/mine` | Mine a chat transcript into the palace, then clean up the temp file |
 | `GET` | `/health` | Server health + active palace/session counts |
 
 ## Running

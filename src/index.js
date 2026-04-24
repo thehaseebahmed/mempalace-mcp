@@ -155,7 +155,7 @@ app.get("/users/:userId/wake-up", async (req, res) => {
 // REST convenience endpoint: accept a transcript, mine it into the palace, then clean up the temp file.
 // Accepts application/json { transcript, filename? } or text/plain body (filename via X-Filename header).
 app.post(
-  "/users/:userId/mine-transcript",
+  "/users/:userId/mine",
   express.text({ type: "text/plain", limit: "50mb" }),
   async (req, res) => {
     const { userId } = req.params;
