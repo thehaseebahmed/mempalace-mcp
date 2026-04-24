@@ -185,7 +185,7 @@ app.post(
 
       const { stdout, stderr } = await execFileAsync(
         PYTHON_BIN,
-        ["-m", "mempalace", "--palace", palaceDir(userId), "mine", tmpDir, "--mode", "convos"],
+        ["-m", "mempalace", "--palace", palaceDir(userId), "sweep", tmpFile],
         { env: { ...process.env, PYTHONIOENCODING: "utf-8" }, maxBuffer: 10 * 1024 * 1024 },
       );
 
