@@ -4,16 +4,20 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { isInitializeRequest, ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
-import { randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { randomUUID, createHash } from "node:crypto";
+import { execFileSync, execFile } from "node:child_process";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 const PORT          = parseInt(process.env.MCP_PORT ?? "3000", 10);
 const BASE_DIR      = process.env.BASE_DIR ?? "/data";
 const PYTHON_BIN    = process.env.PYTHON_BIN ?? "/opt/mempalace-venv/bin/python";
 
 const palaceDir = (userId) => join(BASE_DIR, userId, ".mempalace");
+const contentHash = (obj) => createHash("sha256").update(JSON.stringify(obj)).digest("hex");
 
 // Per-user subprocess clients: userId -> { client, toolParams: Map<toolName, Set<paramName>> }
 const subprocessClients = new Map();
@@ -144,6 +148,40 @@ app.get("/users/:userId/wake-up", async (req, res) => {
     const result = await client.callTool({ name: "mempalace_status", arguments: {} });
     const text = result.content?.map((c) => c.text).join("\n") ?? "";
     res.json({ data: text });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/users/:userId/mine", async (req, res) => {
+  const { userId } = req.params;
+  const { id, jsonl } = req.body ?? {};
+
+  if (!id || !Array.isArray(jsonl) || jsonl.length === 0) {
+    return res.status(400).json({ error: "Request body must include id (string) and jsonl (non-empty array)" });
+  }
+
+  const targetDir = join(BASE_DIR, userId, id);
+
+  try {
+    mkdirSync(targetDir, { recursive: true });
+
+    for (const obj of jsonl) {
+      writeFileSync(join(targetDir, `${contentHash(obj)}.jsonl`), JSON.stringify(obj) + "\n", "utf-8");
+    }
+
+    await getClient(userId);
+
+    const { stdout, stderr } = await execFileAsync(
+      PYTHON_BIN,
+      ["-m", "mempalace", "--palace", palaceDir(userId), "mine", targetDir, "--mode", "convos", "--extract", "general"],
+      { env: { ...process.env, PYTHONIOENCODING: "utf-8" }, maxBuffer: 10 * 1024 * 1024 },
+    );
+
+    rmSync(targetDir, { recursive: true, force: true });
+
+    const output = [stdout, stderr].filter(Boolean).join("\n").trim();
+    res.json({ data: output || "Transcript mined successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
